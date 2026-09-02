@@ -15,7 +15,7 @@ The student journey is:
 > **JAG → UTFORSKA → MIN VÄG → MINA ALTERNATIV → NÄSTA STEG**
 > Internal model: **ME → EXPLORE → MY PATH → MY OPTIONS → NEXT STEP**
 
-This subtree is documentation only. It intentionally contains **no production implementation**. The founder asked that all 25 pre-build deliverables be reviewed before production code begins.
+The numbered deliverables are documentation. [`prototype/`](prototype/README.md) is a working **non-production, local-only prototype** created from those drafts; it does not change the gate status or authorise production use. The founder asked that all 25 pre-build deliverables be reviewed before production implementation begins.
 
 ## Current recommendation
 
@@ -57,6 +57,7 @@ This subtree is documentation only. It intentionally contains **no production im
 - [Gate review](gate-review.md) — Gates 1–10 with evidence, gaps, and pass criteria.
 - [Decision log](DECISIONS.md) — consequential product and architecture decisions.
 - [OpenAPI review contract](schemas/openapi.yaml) — machine-readable companion to deliverable 19; not an implemented server.
+- [Working local prototype](prototype/README.md) — interactive React/Vite implementation for Gate 2–3 testing; no backend, accounts, analytics or live local datasets.
 
 ## Non-negotiable product principles
 
