@@ -21,6 +21,25 @@ The numbered deliverables are documentation. [`prototype/`](prototype/README.md)
 
 **STOP before production implementation.** Desk research supports the problem, and the proposed architecture can be made safe, but Gates 1–10 are not yet passed. In particular, the problem and UX have not been validated with current Swedish students, parents, or study and career guidance counsellors (SYV). Proceed only with primary research and a non-production clickable prototype. See [Gate review](gate-review.md).
 
+## Run the working prototype
+
+Requirements: Node.js 22 and npm.
+
+```bash
+cd prototype
+npm install
+npm run dev
+```
+
+Then open the local URL printed by Vite. The prototype keeps its demonstration
+state in the current browser only. Run the complete quality check with:
+
+```bash
+cd prototype
+npm run check
+npm run build
+```
+
 ## The 25 deliverables
 
 | # | Deliverable | File | Review focus |
