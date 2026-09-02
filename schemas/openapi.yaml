@@ -1,0 +1,1051 @@
+openapi: 3.1.0
+info:
+  title: MINVÄG review API
+  version: 0.1.0
+  description: >-
+    Non-implemented review contract for Sweden-only MVP. Structured outcomes and
+    provenance are authoritative; generated wording is optional. This draft covers
+    core/high-risk endpoints and is not production approval.
+  contact:
+    name: MINVÄG product review
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: /v1
+    description: Same-origin browser API
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+security:
+  - sessionCookie: []
+tags:
+  - name: Catalogue
+    description: Public, source-backed Swedish education catalogue and provenance.
+  - name: Profile
+    description: Student-controlled current observations; no personality labels.
+  - name: Eligibility
+    description: Deterministic, versioned guidance based on self-reported inputs.
+  - name: Recommendations
+    description: Inspectable possibilities with separate dimensions and no universal score.
+  - name: Paths
+    description: Student-owned, branchable possible-path snapshots.
+  - name: Actions
+    description: One safe, explicitly controlled next action.
+  - name: Sharing
+    description: Previewed, scoped, expiring and revocable parent or SYV payloads.
+  - name: Privacy
+    description: Data-rights and privacy-control workflows.
+  - name: Reports
+    description: Error, harm, source, accessibility and security reporting.
+paths:
+  /catalog/programmes:
+    get:
+      operationId: listProgrammes
+      tags: [Catalogue]
+      summary: List Swedish national programmes
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/FrameworkVersion'
+        - $ref: '#/components/parameters/PageCursor'
+        - $ref: '#/components/parameters/PageLimit'
+      responses:
+        '200':
+          description: Versioned programme list
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, asOf, page]
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EntitySummary'
+                  asOf:
+                    $ref: '#/components/schemas/Timestamp'
+                  page:
+                    $ref: '#/components/schemas/Page'
+        '400': {$ref: '#/components/responses/Error'}
+        default:
+          $ref: '#/components/responses/Error'
+  /catalog/programmes/{programmeId}:
+    get:
+      operationId: getProgramme
+      tags: [Catalogue]
+      summary: Get a programme and its source-backed structure
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ProgrammeId'
+        - $ref: '#/components/parameters/AsOf'
+      responses:
+        '200':
+          description: Programme detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Programme'
+        '404':
+          $ref: '#/components/responses/Error'
+  /catalog/offerings:
+    get:
+      operationId: listOfferings
+      tags: [Catalogue]
+      summary: List current or planned local offerings
+      security: []
+      parameters:
+        - name: programmeId
+          in: query
+          schema: {type: string, format: uuid}
+        - name: regionCode
+          in: query
+          description: Coarse official region code, never a home address.
+          schema: {type: string, maxLength: 32}
+        - name: startTerm
+          in: query
+          schema: {type: string, pattern: '^[0-9]{4}-(spring|autumn)$'}
+        - $ref: '#/components/parameters/PageCursor'
+        - $ref: '#/components/parameters/PageLimit'
+      responses:
+        '200':
+          description: Offering results with explicit status/coverage
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, asOf, page, coverage]
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items: {$ref: '#/components/schemas/Offering'}
+                  asOf: {$ref: '#/components/schemas/Timestamp'}
+                  page: {$ref: '#/components/schemas/Page'}
+                  coverage:
+                    $ref: '#/components/schemas/Coverage'
+        '400': {$ref: '#/components/responses/Error'}
+        default:
+          $ref: '#/components/responses/Error'
+  /claims/{claimId}:
+    get:
+      operationId: getClaimSheet
+      tags: [Catalogue]
+      summary: Get a user-safe source sheet for a claim
+      security: []
+      parameters:
+        - name: claimId
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Claim provenance
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ClaimSheet'}
+        '404': {$ref: '#/components/responses/Error'}
+  /profile/observations:
+    get:
+      operationId: listProfileObservations
+      tags: [Profile]
+      summary: List current explicit profile observations
+      responses:
+        '200':
+          description: Living profile observations
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items: {$ref: '#/components/schemas/ProfileObservation'}
+        '400': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      operationId: createProfileObservation
+      tags: [Profile]
+      summary: Add a typed student observation
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProfileObservationCreate'}
+      responses:
+        '201':
+          description: Created observation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProfileObservation'}
+        '400': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /profile/observations/{observationId}:
+    delete:
+      operationId: deleteProfileObservation
+      tags: [Profile]
+      summary: Remove an observation from active profile/future recommendations
+      parameters:
+        - name: observationId
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204': {description: Observation removed}
+        '404': {$ref: '#/components/responses/Error'}
+  /eligibility/evaluations:
+    post:
+      operationId: createEligibilityEvaluation
+      tags: [Eligibility]
+      summary: Run a deterministic versioned eligibility evaluation
+      description: >-
+        Domain outcomes eligible, not_yet_eligible and unknown all return HTTP 200.
+        Missing input never means not eligible. AI cannot calculate/override this result.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EligibilityRequest'}
+      responses:
+        '200':
+          description: Deterministic evaluation and trace
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EligibilityEvaluation'}
+        '409':
+          description: Critical rule/source conflict prevents a safe evaluation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+        '400': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /recommendation-runs:
+    post:
+      operationId: createRecommendationRun
+      tags: [Recommendations]
+      summary: Create inspectable exploration candidates
+      description: No universal match score or admission probability is returned.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [countryCode, intendedStartDate]
+              additionalProperties: false
+              properties:
+                countryCode: {const: SE}
+                intendedStartDate: {type: string, format: date}
+                targetKinds:
+                  type: array
+                  maxItems: 3
+                  uniqueItems: true
+                  items: {enum: [programme, occupation, education_offering]}
+                regionCode: {type: [string, 'null'], maxLength: 32}
+                personalised: {type: boolean, default: true}
+      responses:
+        '201':
+          description: Versioned candidate run
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RecommendationRun'}
+        '400': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /recommendation-runs/{runId}:
+    get:
+      operationId: getRecommendationRun
+      tags: [Recommendations]
+      summary: Retrieve an exact recommendation run while retained
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Recommendation run
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RecommendationRun'}
+        '404': {$ref: '#/components/responses/Error'}
+  /paths:
+    get:
+      operationId: listPaths
+      tags: [Paths]
+      summary: List the student's paths
+      responses:
+        '200':
+          description: Student-owned paths
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items: {$ref: '#/components/schemas/PathSummary'}
+        '400': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      operationId: createPath
+      tags: [Paths]
+      summary: Create a draft possible path
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, nodes, edges]
+              additionalProperties: false
+              properties:
+                title: {type: string, minLength: 1, maxLength: 80}
+                nodes:
+                  type: array
+                  minItems: 1
+                  maxItems: 20
+                  items: {$ref: '#/components/schemas/PathNodeInput'}
+                edges:
+                  type: array
+                  maxItems: 24
+                  items: {$ref: '#/components/schemas/PathEdgeInput'}
+      responses:
+        '201':
+          description: Path version created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Path'}
+        '400': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /next-action:
+    get:
+      operationId: getCurrentNextAction
+      tags: [Actions]
+      summary: Get exactly one current next action
+      responses:
+        '200':
+          description: Current action or explicit null
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [action]
+                additionalProperties: false
+                properties:
+                  action:
+                    oneOf:
+                      - {$ref: '#/components/schemas/NextAction'}
+                      - {type: 'null'}
+        '400': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /next-actions/{actionId}:
+    patch:
+      operationId: transitionNextAction
+      tags: [Actions]
+      summary: Apply an explicit next-action state transition
+      parameters:
+        - name: actionId
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - $ref: '#/components/parameters/CsrfToken'
+        - name: If-Match
+          in: header
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [state]
+              additionalProperties: false
+              properties:
+                state: {enum: [accepted, snoozed, replaced, declined, completed]}
+                snoozedUntil: {type: [string, 'null'], format: date}
+      responses:
+        '200':
+          description: Updated action
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NextAction'}
+        '412': {$ref: '#/components/responses/Error'}
+        '400': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /share-previews:
+    post:
+      operationId: createSharePreview
+      tags: [Sharing]
+      summary: Preview the exact parent or SYV payload before sharing
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recipientType, scopes, expiresAt]
+              additionalProperties: false
+              properties:
+                recipientType: {enum: [parent, syv]}
+                scopes:
+                  type: array
+                  minItems: 1
+                  uniqueItems: true
+                  items: {enum: [shortlist, comparison, path, selected_questions, eligibility_summary]}
+                expiresAt: {$ref: '#/components/schemas/Timestamp'}
+      responses:
+        '200':
+          description: Immutable preview to inspect
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SharePreview'}
+        '400': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /shares:
+    get:
+      operationId: listShares
+      tags: [Sharing]
+      summary: List active and recently revoked shares for the student
+      responses:
+        '200':
+          description: Share controls and access history summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items: {$ref: '#/components/schemas/ShareGrant'}
+        '400': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      operationId: createShare
+      tags: [Sharing]
+      summary: Confirm a reviewed preview and create a revocable share
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [previewId, previewHash]
+              additionalProperties: false
+              properties:
+                previewId: {type: string, format: uuid}
+                previewHash: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+      responses:
+        '201':
+          description: Share created; bootstrap secret returned only once
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - {$ref: '#/components/schemas/ShareGrant'}
+                  - type: object
+                    required: [bootstrapFragment]
+                    properties:
+                      bootstrapFragment:
+                        type: string
+                        description: Client appends this after #; never send in query/path/logs.
+        '409': {$ref: '#/components/responses/Error'}
+        '400': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /shares/{shareId}:
+    delete:
+      operationId: revokeShare
+      tags: [Sharing]
+      summary: Immediately revoke a share
+      parameters:
+        - name: shareId
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204': {description: Service access revoked}
+        '404': {$ref: '#/components/responses/Error'}
+  /shared-payload:
+    get:
+      operationId: getSharedPayload
+      tags: [Sharing]
+      summary: Read only the immutable, scoped payload
+      security:
+        - shareBearer: []
+      responses:
+        '200':
+          description: Student-selected payload
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [recipientType, scopes, expiresAt, payload]
+                additionalProperties: false
+                properties:
+                  recipientType: {enum: [parent, syv]}
+                  scopes:
+                    type: array
+                    items: {type: string}
+                  expiresAt: {$ref: '#/components/schemas/Timestamp'}
+                  payload: {type: object}
+        '401': {$ref: '#/components/responses/Error'}
+        '410':
+          description: Share expired or revoked
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+  /privacy/requests:
+    post:
+      operationId: createPrivacyRequest
+      tags: [Privacy]
+      summary: Request access, export, deletion, restriction or objection
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              additionalProperties: false
+              properties:
+                type: {enum: [access, export, delete, restrict, object]}
+      responses:
+        '202':
+          description: Request accepted; deletion locks access immediately where applicable
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PrivacyRequest'}
+        '400': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /reports:
+    post:
+      operationId: createReport
+      tags: [Reports]
+      summary: Report wrong, stale, misleading, harmful or inaccessible content
+      security:
+        - sessionCookie: []
+        - {}
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              additionalProperties: false
+              properties:
+                type: {enum: [wrong, stale, conflict, misleading, harmful, accessibility, security]}
+                entityId: {type: [string, 'null'], format: uuid}
+                claimId: {type: [string, 'null'], format: uuid}
+                description: {type: [string, 'null'], maxLength: 1000}
+                replyRequested: {type: boolean, default: false}
+      responses:
+        '202':
+          description: Report accepted; no promise of 24/7 monitoring
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reportId, status, responseExpectation]
+                additionalProperties: false
+                properties:
+                  reportId: {type: string, format: uuid}
+                  status: {const: received}
+                  responseExpectation: {type: string, maxLength: 240}
+        '400': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-minvag_session
+      description: Secure, HttpOnly, SameSite first-party session cookie.
+    shareBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: ShareToken
+      description: High-entropy scoped token, presented only after fragment bootstrap.
+  headers:
+    RequestId:
+      description: Correlation ID safe to quote to support.
+      schema: {type: string, format: uuid}
+  parameters:
+    ProgrammeId:
+      name: programmeId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    FrameworkVersion:
+      name: frameworkVersion
+      in: query
+      schema: {enum: [GY25, GY11], default: GY25}
+    AsOf:
+      name: asOf
+      in: query
+      description: Resolve claims valid/known at this time where supported.
+      schema: {$ref: '#/components/schemas/Timestamp'}
+    PageCursor:
+      name: page[cursor]
+      in: query
+      schema: {type: string, maxLength: 500}
+    PageLimit:
+      name: page[limit]
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 50, default: 20}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, format: uuid}
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema: {type: string, minLength: 32, maxLength: 256}
+  responses:
+    Error:
+      description: Safe structured error
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+  schemas:
+    Timestamp:
+      type: string
+      format: date-time
+    Page:
+      type: object
+      required: [nextCursor, hasMore]
+      additionalProperties: false
+      properties:
+        nextCursor: {type: [string, 'null']}
+        hasMore: {type: boolean}
+    EntitySummary:
+      type: object
+      required: [id, type, label, countryCode, claimRefs]
+      additionalProperties: false
+      properties:
+        id: {type: string, format: uuid}
+        type: {enum: [programme, school_unit, education_offering, occupation]}
+        label: {type: string, minLength: 1, maxLength: 200}
+        countryCode: {const: SE}
+        frameworkVersion: {type: [string, 'null'], enum: [GY25, GY11, null]}
+        claimRefs:
+          type: array
+          items: {type: string, format: uuid}
+    ClaimRef:
+      type: object
+      required: [claimId, kind, label, status, verifiedAt]
+      additionalProperties: false
+      properties:
+        claimId: {type: string, format: uuid}
+        kind: {enum: [authority_rule, authority_fact, provider_fact, historical_statistic, forecast, product_inference, scenario]}
+        label: {type: string, maxLength: 120}
+        status: {enum: [active, stale, conflicted, suppressed, superseded]}
+        appliesFrom: {type: [string, 'null'], format: date}
+        appliesTo: {type: [string, 'null'], format: date}
+        dataDate: {type: [string, 'null'], format: date}
+        verifiedAt: {$ref: '#/components/schemas/Timestamp'}
+    Quality:
+      type: object
+      required: [authority, coverage, freshness, agreement]
+      additionalProperties: false
+      properties:
+        authority: {enum: [high, medium, low]}
+        coverage: {enum: [complete, partial, unknown]}
+        freshness: {enum: [current, stale, expired, unknown]}
+        agreement: {enum: [no_conflict, conflict, resolved]}
+    ClaimSheet:
+      type: object
+      required: [claim, source, quality, transformationSummary, conflicts]
+      additionalProperties: false
+      properties:
+        claim: {$ref: '#/components/schemas/ClaimRef'}
+        source:
+          type: object
+          required: [owner, sourceType, originalUrl, retrievedAt]
+          additionalProperties: false
+          properties:
+            owner: {type: string, maxLength: 200}
+            sourceType: {enum: [law, authority_api, authority_page, official_statistics, provider, licensed_aggregator, editorial]}
+            originalUrl: {type: string, format: uri}
+            retrievedAt: {$ref: '#/components/schemas/Timestamp'}
+        quality: {$ref: '#/components/schemas/Quality'}
+        transformationSummary: {type: string, maxLength: 500}
+        conflicts:
+          type: array
+          items:
+            type: object
+            required: [status, summary]
+            additionalProperties: false
+            properties:
+              status: {enum: [open, resolved]}
+              summary: {type: string, maxLength: 500}
+    Programme:
+      allOf:
+        - $ref: '#/components/schemas/EntitySummary'
+        - type: object
+          required: [programmeType, asOf, description, sourceSummary]
+          properties:
+            programmeType: {enum: [vocational, higher_ed_preparatory, introduction, special_variant, fourth_technical]}
+            asOf: {$ref: '#/components/schemas/Timestamp'}
+            description: {type: string, maxLength: 2000}
+            sourceSummary:
+              type: array
+              items: {$ref: '#/components/schemas/ClaimRef'}
+    Coverage:
+      type: object
+      required: [state, label]
+      additionalProperties: false
+      properties:
+        state: {enum: [complete, partial, unknown]}
+        label: {type: string, maxLength: 240}
+    Offering:
+      type: object
+      required: [id, programme, schoolUnit, startTerm, status, claimRefs]
+      additionalProperties: false
+      properties:
+        id: {type: string, format: uuid}
+        programme: {$ref: '#/components/schemas/EntitySummary'}
+        schoolUnit: {$ref: '#/components/schemas/EntitySummary'}
+        startTerm: {type: string, pattern: '^[0-9]{4}-(spring|autumn)$'}
+        status: {enum: [planned, confirmed, cancelled, unknown]}
+        claimRefs:
+          type: array
+          minItems: 1
+          items: {type: string, format: uuid}
+    ProfileObservationCreate:
+      type: object
+      required: [kind, conceptCode, value]
+      additionalProperties: false
+      properties:
+        kind: {enum: [interest, value_priority, activity, work_style, dislike, goal, practical_preference]}
+        conceptCode: {type: [string, 'null'], maxLength: 80}
+        value:
+          oneOf:
+            - {type: string, minLength: 1, maxLength: 200}
+            - {type: boolean}
+            - type: array
+              maxItems: 10
+              items: {type: string, maxLength: 80}
+    ProfileObservation:
+      allOf:
+        - $ref: '#/components/schemas/ProfileObservationCreate'
+        - type: object
+          required: [id, origin, observedAt]
+          properties:
+            id: {type: string, format: uuid}
+            origin: {enum: [student_explicit, imported, inferred]}
+            observedAt: {$ref: '#/components/schemas/Timestamp'}
+    SubjectResult:
+      type: object
+      required: [subjectCode, result, origin]
+      additionalProperties: false
+      properties:
+        subjectCode: {type: string, pattern: '^[A-Z0-9_]{1,32}$'}
+        result: {enum: [pass, not_pass, unknown]}
+        origin: {const: student_self_reported}
+    EligibilityRequest:
+      type: object
+      required: [targetEntityId, countryCode, frameworkVersion, intendedStartDate, subjectResults, persist]
+      additionalProperties: false
+      properties:
+        targetEntityId: {type: string, format: uuid}
+        countryCode: {const: SE}
+        frameworkVersion: {enum: [GY25, GY11]}
+        intendedStartDate: {type: string, format: date}
+        subjectResults:
+          type: array
+          maxItems: 30
+          items: {$ref: '#/components/schemas/SubjectResult'}
+        persist: {type: boolean, default: false}
+    RequirementResult:
+      type: object
+      required: [code, state, subjectCodes]
+      additionalProperties: false
+      properties:
+        code: {type: string, maxLength: 80}
+        state: {enum: [met, unmet, missing_input, not_applicable]}
+        subjectCodes:
+          type: array
+          items: {type: string}
+    Explanation:
+      type: object
+      required: [heading, body, generatedBy, claimRefs]
+      additionalProperties: false
+      properties:
+        heading: {type: string, maxLength: 120}
+        body: {type: string, maxLength: 1000}
+        generatedBy: {enum: [template, ai_wording]}
+        claimRefs:
+          type: array
+          items: {type: string, format: uuid}
+        disclosure: {type: [string, 'null'], maxLength: 240}
+    EligibilityEvaluation:
+      type: object
+      required: [id, asOf, result, inputOriginLabel, rule, requirements, missingInputs, unmetRequirements, calculationTrace, explanation, allowedNextActionCodes]
+      additionalProperties: false
+      properties:
+        id: {type: string, format: uuid}
+        asOf: {$ref: '#/components/schemas/Timestamp'}
+        result: {enum: [eligible, not_yet_eligible, unknown, not_applicable]}
+        inputOriginLabel: {type: string, maxLength: 120}
+        rule:
+          type: object
+          required: [version, validFrom, claimRefs]
+          additionalProperties: false
+          properties:
+            version: {type: string, maxLength: 80}
+            validFrom: {type: string, format: date}
+            claimRefs:
+              type: array
+              minItems: 1
+              items: {type: string, format: uuid}
+        requirements:
+          type: array
+          items: {$ref: '#/components/schemas/RequirementResult'}
+        missingInputs:
+          type: array
+          items: {type: string}
+        unmetRequirements:
+          type: array
+          items: {type: string}
+        calculationTrace:
+          type: array
+          items: {type: string, maxLength: 500}
+        explanation: {$ref: '#/components/schemas/Explanation'}
+        allowedNextActionCodes:
+          type: array
+          items: {type: string, maxLength: 80}
+    RecommendationCandidate:
+      type: object
+      required: [id, entity, displayOrder, sortReason, eligibility, explorationFit, historicalAdmission, feasibility, resilience, claimRefs]
+      additionalProperties: false
+      properties:
+        id: {type: string, format: uuid}
+        entity: {$ref: '#/components/schemas/EntitySummary'}
+        displayOrder: {type: integer, minimum: 1, maximum: 5}
+        sortReason: {enum: [student_evidence, diversity, student_saved, nearby, alternative, neutral_browse]}
+        eligibility:
+          type: object
+          required: [state]
+          additionalProperties: false
+          properties:
+            state: {enum: [eligible, not_yet_eligible, unknown, not_applicable]}
+            evaluationId: {type: [string, 'null'], format: uuid}
+        explorationFit:
+          type: object
+          required: [reasons, counterpoint, inferenceConfidence]
+          additionalProperties: false
+          properties:
+            reasons:
+              type: array
+              maxItems: 3
+              items:
+                type: object
+                required: [observationId, text]
+                additionalProperties: false
+                properties:
+                  observationId: {type: string, format: uuid}
+                  text: {type: string, maxLength: 300}
+            counterpoint: {type: string, maxLength: 500}
+            inferenceConfidence: {enum: [low, medium, high]}
+        historicalAdmission:
+          type: object
+          required: [state, claimRefs]
+          additionalProperties: false
+          properties:
+            state: {enum: [available, unavailable, conflicted, stale]}
+            claimRefs:
+              type: array
+              items: {type: string, format: uuid}
+        feasibility:
+          type: object
+          required: [offeringState, claimRefs]
+          additionalProperties: false
+          properties:
+            offeringState: {enum: [confirmed, planned, unknown, region_not_selected, no_verified_offering]}
+            claimRefs:
+              type: array
+              items: {type: string, format: uuid}
+        resilience:
+          type: object
+          required: [state, relationshipRefs]
+          additionalProperties: false
+          properties:
+            state: {enum: [mapped, partially_mapped, not_mapped]}
+            relationshipRefs:
+              type: array
+              items: {type: string, format: uuid}
+        claimRefs:
+          type: array
+          items: {type: string, format: uuid}
+    RecommendationRun:
+      type: object
+      required: [id, asOf, algorithmVersion, personalised, candidates]
+      additionalProperties: false
+      properties:
+        id: {type: string, format: uuid}
+        asOf: {$ref: '#/components/schemas/Timestamp'}
+        algorithmVersion: {type: string, maxLength: 80}
+        personalised: {type: boolean}
+        candidates:
+          type: array
+          minItems: 1
+          maxItems: 5
+          items: {$ref: '#/components/schemas/RecommendationCandidate'}
+    PathSummary:
+      type: object
+      required: [id, title, state, version, updatedAt]
+      additionalProperties: false
+      properties:
+        id: {type: string, format: uuid}
+        title: {type: string, maxLength: 80}
+        state: {enum: [draft, active, archived]}
+        version: {type: integer, minimum: 1}
+        updatedAt: {$ref: '#/components/schemas/Timestamp'}
+    PathNodeInput:
+      type: object
+      required: [clientId, nodeKind]
+      additionalProperties: false
+      properties:
+        clientId: {type: string, maxLength: 80}
+        entityId: {type: [string, 'null'], format: uuid}
+        customLabel: {type: [string, 'null'], maxLength: 120}
+        nodeKind: {enum: [current_stage, possibility, milestone, question, unknown]}
+    PathEdgeInput:
+      type: object
+      required: [fromClientId, toClientId, certainty]
+      additionalProperties: false
+      properties:
+        fromClientId: {type: string, maxLength: 80}
+        toClientId: {type: string, maxLength: 80}
+        relationshipId: {type: [string, 'null'], format: uuid}
+        certainty: {enum: [verified_rule, supported_possibility, student_hypothesis, unknown]}
+        label: {type: [string, 'null'], maxLength: 160}
+    Path:
+      allOf:
+        - $ref: '#/components/schemas/PathSummary'
+        - type: object
+          required: [graphSnapshotAt, nodes, edges]
+          properties:
+            graphSnapshotAt: {$ref: '#/components/schemas/Timestamp'}
+            nodes:
+              type: array
+              items: {$ref: '#/components/schemas/PathNodeInput'}
+            edges:
+              type: array
+              items: {$ref: '#/components/schemas/PathEdgeInput'}
+    NextAction:
+      type: object
+      required: [id, code, title, rationale, state, proposedAt, version]
+      additionalProperties: false
+      properties:
+        id: {type: string, format: uuid}
+        code: {type: string, maxLength: 80}
+        title: {type: string, maxLength: 160}
+        rationale: {type: string, maxLength: 500}
+        state: {enum: [proposed, accepted, snoozed, replaced, declined, completed]}
+        proposedAt: {$ref: '#/components/schemas/Timestamp'}
+        version: {type: integer, minimum: 1}
+    SharePreview:
+      type: object
+      required: [id, recipientType, scopes, expiresAt, exactPayload, excludedByDefault, previewHash]
+      additionalProperties: false
+      properties:
+        id: {type: string, format: uuid}
+        recipientType: {enum: [parent, syv]}
+        scopes:
+          type: array
+          items: {type: string}
+        expiresAt: {$ref: '#/components/schemas/Timestamp'}
+        exactPayload: {type: object}
+        excludedByDefault:
+          type: array
+          items: {type: string}
+        previewHash: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+    ShareGrant:
+      type: object
+      required: [id, recipientType, scopes, grantedAt, expiresAt, revokedAt, lastAccessAt]
+      additionalProperties: false
+      properties:
+        id: {type: string, format: uuid}
+        recipientType: {enum: [parent, syv]}
+        scopes:
+          type: array
+          items: {type: string}
+        grantedAt: {$ref: '#/components/schemas/Timestamp'}
+        expiresAt: {$ref: '#/components/schemas/Timestamp'}
+        revokedAt: {oneOf: [{$ref: '#/components/schemas/Timestamp'}, {type: 'null'}]}
+        lastAccessAt: {oneOf: [{$ref: '#/components/schemas/Timestamp'}, {type: 'null'}]}
+    PrivacyRequest:
+      type: object
+      required: [id, type, status, requestedAt]
+      additionalProperties: false
+      properties:
+        id: {type: string, format: uuid}
+        type: {enum: [access, export, delete, restrict, object]}
+        status: {enum: [received, verifying, processing, completed, refused_with_reason]}
+        requestedAt: {$ref: '#/components/schemas/Timestamp'}
+    FieldError:
+      type: object
+      required: [path, code, message]
+      additionalProperties: false
+      properties:
+        path: {type: string, maxLength: 300}
+        code: {type: string, maxLength: 80}
+        message: {type: string, maxLength: 300}
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, requestId]
+          additionalProperties: false
+          properties:
+            code:
+              enum: [VALIDATION_ERROR, UNAUTHENTICATED, NOT_AUTHORISED, NOT_FOUND, CONFLICT, STALE_WRITE, MISSING_INPUT, RULE_UNAVAILABLE, SOURCE_CONFLICT, SOURCE_UNAVAILABLE, SHARE_EXPIRED, RATE_LIMITED, TEMPORARILY_UNAVAILABLE]
+            message: {type: string, maxLength: 500}
+            fieldErrors:
+              type: array
+              maxItems: 50
+              items: {$ref: '#/components/schemas/FieldError'}
+            requestId: {type: string, format: uuid}
+            helpUrl: {type: [string, 'null'], format: uri-reference}
